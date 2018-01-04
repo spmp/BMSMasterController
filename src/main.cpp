@@ -8,10 +8,10 @@
  *
  * The hardware at this time uses the following resources
  * - Serail0 - default pins
- * - Serial1
+ * - BMSCommsSenderSerial
  *   - RX Pin 33
  *   - TX Pin 32
- * - Serial2
+ * - CellCommsSerial
  *   - RX Pin 27
  *   - TX Pin 26
  * - I2C (Wire) (1)
@@ -30,6 +30,16 @@
 
 /** Cell Comms - communication with the Cell Top Modules **/
 #define NUM_CELLS                     28
+#define CELL_COMMS_SERIAL_BAUD        19200
+#define CELL_COMMS_SERIAL_DEV         1
+#define CELL_COMMS_SERIAL_TXPIN       26
+#define CELL_COMMS_SERIAL_RXPIN       27
+
+/** BMS Comms Sender - inter micro BMS comms output **/
+#define BMS_COMMS_SENDER_SERIAL_BAUD  4800
+#define BMS_COMMS_SENDER_SERIAL_DEV   2
+#define BMS_COMMS_SENDER_SERIAL_TXPIN 32
+#define BMS_COMMS_SENDER_SERIAL_RXPIN 33
 
 /** I2C port used for Adafruit display **/
 #define I2C_DISPLAY_SDA_PIN           0
@@ -39,7 +49,7 @@
 /** Display - Adafruid_GFX display **/
 #define ADAFRUIT_SSD1306_ADDRESS      0x3C
 #define ADAFRUID_SSD1306_DEVICE_ID    SSD1306_128_64_ID
-#define OLED_RESET                    4
+#define OLED_RESET                    I2C_DISPLAY_SCL_PIN
 
 /** CellCommsDisplay settings **/
 #define CELLCOMMSDISPLAY_HEADER_PROP 0.25
@@ -49,26 +59,17 @@
 /** Serial 0 - debug serial **/
 #define SERIAL0_BAUD                  38400
 
-/** Serial 1 - Cell Top Module communitcations **/
-#define SERIAL1_TXPIN                 32
-#define SERIAL1_RXPIN                 33
-#define SERIAL1_BAUD                  4800
-
-/** Serial 2 - inter micro BMS comms output **/
-#define SERIAL2_TXPIN                 26
-#define SERIAL2_RXPIN                 27
-
 /** Instantiate Serials **/
-HardwareSerial Serial1(1);
-HardwareSerial Serial2(2);
+HardwareSerial CellCommsSerial(CELL_COMMS_SERIAL_DEV);
+HardwareSerial BMSCommsSenderSerial(BMS_COMMS_SENDER_SERIAL_DEV);
 
 /** Instantiate CellComms, BMSCommsSender, Adafruit_SSD1306, CellCommsDisplay **/
 CellComms cells(
   NUM_CELLS,
-  Serial2
+  CellCommsSerial
 );
 BMSCommsSender bmsCommsSender(
-  Serial1,
+  BMSCommsSenderSerial,
   cells
 );
 Adafruit_SSD1306 display(
@@ -120,11 +121,21 @@ void setup()   {
   Serial.begin(SERIAL0_BAUD);
   debugPrint("Setup Serial0");
 
-  Serial1.begin(SERIAL1_BAUD, SERIAL_8N1, SERIAL1_RXPIN, SERIAL1_TXPIN);
-  debugPrint("Setup Serial1");
+  CellCommsSerial.begin(
+    CELL_COMMS_SERIAL_BAUD,
+    SERIAL_8N1,
+    CELL_COMMS_SERIAL_RXPIN,
+    CELL_COMMS_SERIAL_TXPIN
+  );
+  debugPrint("Setup CellCommsSerial");
 
-  Serial2.begin(CELLCOMMS_BAUD, SERIAL_8N1, SERIAL2_RXPIN, SERIAL2_TXPIN);
-  debugPrint("Setup Serial2");
+  BMSCommsSenderSerial.begin(
+    BMS_COMMS_SENDER_SERIAL_BAUD,
+    SERIAL_8N1,
+    BMS_COMMS_SENDER_SERIAL_RXPIN,
+    BMS_COMMS_SENDER_SERIAL_TXPIN
+  );
+  debugPrint("Setup BMSCommsSenderSerial");
 
   // Initialise Wire (I2C)
   Wire.begin(I2C_DISPLAY_SDA_PIN, I2C_DISPLAY_SCL_PIN, I2C_DISPLAY_FREQUENCY);

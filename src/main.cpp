@@ -5,6 +5,7 @@
  * - Communicates with external charger on Serial 2
  * - Provides debug output on Serial0
  * - Displays cell information on an Adafruit_GFX display
+ * - Logs status to serial and bluetooth serial
  *
  * The hardware at this time uses the following resources
  * - Serail0 - default pins
@@ -17,6 +18,7 @@
  * - I2C (Wire) (1)
  *   - SDA Pin 0
  *   - SCL Pin 4
+ * - BT Classic RFCOMM
  *
  **/
 
@@ -26,7 +28,13 @@
 #include <BMSCommsSender.h>
 #include <CellCommsDisplay.h>
 #include <Adafruit_SSD1306.h>
+#include "BluetoothSerial.h"
 
+#if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
+#error Bluetooth is not enabled! Please run `make menuconfig` to and enable it
+#endif
+
+#define debug
 
 /** Cell Comms - communication with the Cell Top Modules **/
 #define NUM_CELLS                     28
@@ -59,9 +67,13 @@
 /** Serial 0 - debug serial **/
 #define SERIAL0_BAUD                  38400
 
+/** BT Serial device **/
+#define BT_SERIAL_NAME                 "CTM BMS"
+
 /** Instantiate Serials **/
 HardwareSerial CellCommsSerial(CELL_COMMS_SERIAL_DEV);
 HardwareSerial BMSCommsSenderSerial(BMS_COMMS_SENDER_SERIAL_DEV);
+BluetoothSerial SerialBT;
 
 /** Instantiate CellComms, BMSCommsSender, Adafruit_SSD1306, CellCommsDisplay **/
 CellComms cells(
@@ -73,6 +85,7 @@ BMSCommsSender bmsCommsSender(
   cells
 );
 Adafruit_SSD1306 display(
+  Wire,
   SSD1306_128_64_ID,
   OLED_RESET
 );
@@ -137,6 +150,9 @@ void setup()   {
   );
   debugPrint("Setup BMSCommsSenderSerial");
 
+  SerialBT.begin(BT_SERIAL_NAME);
+  debugPrint("Setup SerialBT");
+
   // Initialise Wire (I2C)
   Wire.begin(I2C_DISPLAY_SDA_PIN, I2C_DISPLAY_SCL_PIN, I2C_DISPLAY_FREQUENCY);
   debugPrint("Setup Wire");
@@ -184,7 +200,7 @@ void loop() {
       // Read data
       cells.readCells();
 
-      String printLine =
+      String bankStatus =
         String(timestamp)              +
         String(" Vmean: ")             + String(cells.millivoltsMean()) +
         String(" Vmax: ")              + String(cells.millivoltsMax()) +
@@ -195,14 +211,22 @@ void loop() {
         String(" over voltage: ")      + String(cells.overVoltageNum()) +
         String(" under voltage: ")     + String(cells.underVoltageNum()) +
         String(" temperature: ")       + String(cells.temperatureMean() * 0.1, 1) +
-        String(" over temperature: ")  + String(cells.overTemperatureNum());
+        String(" over temperature: ")  + String(cells.overTemperatureNum()) +
+        String("\r\n");
+      Serial.print(bankStatus);
+      SerialBT.print(bankStatus);
 
-      Serial.print(printLine);
-      Serial.print("\r\n");
+      // Add cell mv per cell
+      // NOTE: BT Serial needs some time between sending packets
+      // The following for-loop is enough time.
+      String cellVs = String("");
       for (CellData cd : cells.cellDataVect) {
-        Serial.print(cd.millivolts);
-        Serial.print(" ");
+        cellVs += String(cd.millivolts);
+        cellVs += String(" ");
       }
+      cellVs += String("\r\n");
+      Serial.print(cellVs);
+      SerialBT.print(cellVs);
 
       // Send message to charger
       bmsCommsSender.send_packet();
@@ -218,8 +242,6 @@ void loop() {
         esp_restart();
       }
       display.display();
-
-      Serial.print("\r\n");
 
       toggleReadWrite = 0;
     }
